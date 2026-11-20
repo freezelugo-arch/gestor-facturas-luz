@@ -13,6 +13,22 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Estilos CSS personalizados: Menú superior fijo (Sticky)
+st.markdown("""
+<style>
+    /* Fijar el menú de pestañas superior para que no se mueva con el scroll */
+    div[data-testid="stTabs"] > div[role="tablist"] {
+        position: sticky;
+        top: 2.875rem;
+        z-index: 999;
+        background-color: var(--background-color, #ffffff);
+        padding-top: 12px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid rgba(128, 128, 128, 0.25);
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Título y encabezado
 st.title("⚡ Control y Análisis de Facturas de Luz")
 st.caption("Gestiona tu gasto eléctrico doméstico de forma inteligente (PC y Móvil)")
