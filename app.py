@@ -6,7 +6,7 @@ from src.parser_naturgy import extraer_factura_naturgy
 from src.db import guardar_factura_en_db, obtener_facturas_de_db
 from src.assets import LOGO_BASE64
 
-# Configuración de la página (optimizada para PC y móvil)
+# Configuración de la página
 st.set_page_config(
     page_title="Control Facturas de Luz",
     page_icon="⚡",
@@ -14,105 +14,143 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS personalizados: Cabecera y menú superior 100% fijos (Sticky)
+# Estilos CSS personalizados
 st.markdown("""
 <style>
-    /* 1. Ocultar la barra superior gris/negra de Streamlit (que tapaba el logo y título) */
+    /* Ocultar barra superior gris de Streamlit para dejar la app limpia */
     header[data-testid="stHeader"] {
         display: none !important;
     }
     
-    /* 2. Mantener accesible el botón de desplegar la barra lateral si se cierra */
+    /* Botón para volver a abrir la barra lateral si se cierra */
     div[data-testid="collapsedControl"] {
         display: block !important;
         position: fixed !important;
-        top: 12px !important;
-        left: 12px !important;
+        top: 14px !important;
+        left: 14px !important;
         z-index: 10000 !important;
     }
 
-    /* 3. Espaciado superior limpio y holgado para que respire */
+    /* Espaciado del contenedor principal */
     .block-container {
-        padding-top: 1.2rem !important;
-        padding-bottom: 2rem !important;
-        overflow: visible !important;
-        contain: none !important;
+        padding-top: 1.5rem !important;
+        padding-bottom: 3rem !important;
     }
-
-    /* 4. Desbloquear contain/overflow en los contenedores de Streamlit para que sticky funcione sin fallos */
-    [data-testid="stAppViewContainer"] > section.main {
-        overflow-y: auto !important;
-        overflow-x: hidden !important;
+    
+    /* Botón flotante para volver arriba al hacer scroll */
+    .floating-top-btn {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 9999;
+        background-color: #ff9800;
+        color: #111111 !important;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        font-weight: bold;
+        text-decoration: none !important;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+        transition: transform 0.2s ease;
     }
-    div[data-testid="stVerticalBlock"],
-    div[data-testid="stVerticalBlock"] > div,
-    div[data-testid="stTabs"] {
-        overflow: visible !important;
-        contain: none !important;
-    }
-
-    /* 5. Cabecera fija (Logo + Título) al hacer scroll */
-    .sticky-header-container {
-        position: -webkit-sticky !important;
-        position: sticky !important;
-        top: 0 !important;
-        z-index: 9999 !important;
-        background-color: var(--background-color, #0e1117) !important;
-        padding-top: 6px !important;
-        padding-bottom: 10px !important;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-    }
-
-    /* 6. Barra de pestañas fijas justo debajo del título */
-    div[data-testid="stTabs"] > div[role="tablist"] {
-        position: -webkit-sticky !important;
-        position: sticky !important;
-        top: 66px !important;
-        z-index: 9998 !important;
-        background-color: var(--background-color, #0e1117) !important;
-        padding-top: 8px !important;
-        padding-bottom: 8px !important;
-        border-bottom: 2px solid rgba(255, 152, 0, 0.5) !important;
+    .floating-top-btn:hover {
+        transform: scale(1.1);
+        background-color: #ffa726;
     }
 </style>
+<div id="top"></div>
+<a href="#top" class="floating-top-btn" title="Volver arriba">⬆️</a>
 """, unsafe_allow_html=True)
 
-# Barra lateral: Carga de facturas
-with st.sidebar:
-    st.header("📥 Cargar Facturas")
-    archivos_subidos = st.file_uploader(
-        "Sube uno o varios PDFs de Naturgy",
-        type=["pdf"],
-        accept_multiple_files=True
-    )
-    st.info("💡 Al subir facturas, se guardan automáticamente en tu base de datos en la nube.")
-
-# Si el usuario sube archivos, se extraen y se guardan en Supabase
-if archivos_subidos:
-    guardadas_ok = 0
-    for archivo in archivos_subidos:
-        try:
-            f = extraer_factura_naturgy(archivo)
-            if guardar_factura_en_db(f):
-                guardadas_ok += 1
-        except Exception as e:
-            st.error(f"Error procesando {archivo.name}: {e}")
-    if guardadas_ok > 0:
-        st.sidebar.success(f"✅ {guardadas_ok} factura(s) sincronizada(s) en Supabase.")
-
-# Cargar todas las facturas desde Supabase
+# Cargar facturas desde Supabase
 facturas = obtener_facturas_de_db()
 
-# Si aún no hay conexión a Supabase pero se subieron en memoria:
-if not facturas and archivos_subidos:
-    for archivo in archivos_subidos:
-        try:
-            f = extraer_factura_naturgy(archivo)
-            facturas.append(f)
-        except Exception:
-            pass
+# ================= BARRA LATERAL: NAVEGACIÓN Y CONTROLES (100% FIJOS) =================
+with st.sidebar:
+    # 1. Cabecera con Logo en la barra lateral
+    st.markdown(f"""
+    <div style="display: flex; align-items: center; gap: 12px; margin-top: -10px; margin-bottom: 15px;">
+        <img src="data:image/jpeg;base64,{LOGO_BASE64}" style="width: 44px; height: 44px; border-radius: 10px; box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4); object-fit: cover;">
+        <div>
+            <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #ffffff; line-height: 1.1;">
+                Control Facturas
+            </h3>
+            <span style="font-size: 0.78rem; color: #9aa0a6;">Naturgy Doméstico</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-# Si no hay facturas cargadas, mostramos mensaje de bienvenida
+    # 2. Menú de navegación principal (Siempre visible, nunca se mueve con el scroll)
+    st.markdown("#### 📌 Secciones")
+    seccion_activa = st.radio(
+        "Elige la sección a consultar:",
+        [
+            "📊 Consulta del Mes",
+            "📈 Hábitos y Evolución",
+            "🔌 Diagnóstico de Potencia",
+            "📋 Histórico Completo"
+        ],
+        index=0,
+        label_visibility="collapsed"
+    )
+    
+    st.markdown("---")
+
+    # 3. Filtros y selección de mes
+    st.markdown("#### 🔎 Período a Consultar")
+    if facturas:
+        opciones_dict = {
+            f"📅 {f.fecha_inicio} al {f.fecha_fin} — {f.total_factura_eur:.2f} €": f
+            for f in reversed(sorted(facturas, key=lambda x: x.fecha_inicio))
+        }
+        sel_label = st.selectbox(
+            "Selecciona la factura:",
+            list(opciones_dict.keys()),
+            index=0,
+            label_visibility="collapsed"
+        )
+        factura_sel = opciones_dict[sel_label]
+        
+        ver_con_impuestos = st.toggle(
+            "🧾 Ver con Impuestos (IVA + Elec.)",
+            value=True,
+            help="Aplica el Impuesto Eléctrico (~5.11%) y el IVA (21%) a cada tramo para calcular el coste final real."
+        )
+    else:
+        factura_sel = None
+        ver_con_impuestos = True
+
+    st.markdown("---")
+
+    # 4. Subida de nuevas facturas
+    st.markdown("#### 📥 Cargar Facturas")
+    archivos_subidos = st.file_uploader(
+        "Arrastra PDFs de Naturgy aquí",
+        type=["pdf"],
+        accept_multiple_files=True,
+        label_visibility="collapsed"
+    )
+    if archivos_subidos:
+        guardadas_ok = 0
+        for archivo in archivos_subidos:
+            try:
+                f = extraer_factura_naturgy(archivo)
+                if guardar_factura_en_db(f):
+                    guardadas_ok += 1
+            except Exception as e:
+                st.error(f"Error en {archivo.name}: {e}")
+        if guardadas_ok > 0:
+            st.success(f"✅ {guardadas_ok} factura(s) sincronizada(s).")
+            st.rerun()
+
+    if facturas:
+        st.caption(f"📁 **Total en BD:** `{len(facturas)} facturas registradas`")
+
+# Si no hay facturas cargadas, mensaje de bienvenida
 if not facturas:
     st.info("👈 Comienza subiendo tu factura en PDF desde el menú lateral izquierdo.")
     st.markdown("""
@@ -124,68 +162,21 @@ if not facturas:
     """)
     st.stop()
 
-# Ordenar facturas por fecha de inicio (cronológico)
-facturas.sort(key=lambda x: x.fecha_inicio)
-
-# ================= SELECTOR DE MES E IMPUESTOS EN LA BARRA LATERAL (FIJA) =================
-# Al ponerlo en la barra lateral, NUNCA se sube con el scroll y está siempre visible
-with st.sidebar:
-    st.markdown("---")
-    st.header("🔎 Consulta de Factura")
-    
-    opciones_dict = {
-        f"📅 {f.fecha_inicio} al {f.fecha_fin} — {f.total_factura_eur:.2f} € ({f.consumo_total_kwh:.0f} kWh)": f
-        for f in reversed(facturas)
-    }
-    sel_label = st.selectbox(
-        "Selecciona el mes / período:",
-        list(opciones_dict.keys()),
-        index=0,
-        help="Este menú permanece fijo en la barra lateral para que no se mueva al hacer scroll."
-    )
-    factura_sel = opciones_dict[sel_label]
-    
-    ver_con_impuestos = st.toggle(
-        "🧾 Ver con Impuestos (IVA + Elec.)",
-        value=True,
-        help="Aplica el Impuesto Eléctrico (~5.11%) y el IVA (21%) proporcionales a cada tramo para saber el coste final real."
-    )
-    st.caption(f"📁 **Total en BD:** `{len(facturas)} facturas registradas`")
-
-# ================= CABECERA COMPACTA Y LOGO =================
-st.markdown(f"""
-<div class="sticky-header-container">
-    <div style="display: flex; align-items: center; gap: 14px;">
-        <img src="data:image/jpeg;base64,{LOGO_BASE64}" style="width: 48px; height: 48px; border-radius: 12px; box-shadow: 0 4px 15px rgba(255, 152, 0, 0.4); object-fit: cover;">
-        <div>
-            <h2 style="margin: 0; font-size: 1.45rem; font-weight: 700; color: #ffffff; line-height: 1.2;">
-                Control Facturas de Luz
-            </h2>
-            <div style="font-size: 0.82rem; color: #9aa0a6; margin-top: 3px;">
-                Período activo: <b style="color: #ff9800;">{factura_sel.fecha_inicio} al {factura_sel.fecha_fin}</b> ({factura_sel.dias_facturados} días) • Tarifa: <b>{factura_sel.tarifa}</b>
-            </div>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
 # ================= CÁLCULO DE RATIOS Y FACTORES DE IMPUESTOS =================
 base_energia_pot = factura_sel.total_energia_eur + factura_sel.total_potencia_eur
 
-# Aseguramos ratios realistas
 if 0 < factura_sel.impuesto_electricidad_eur < base_energia_pot:
     ratio_iee = factura_sel.impuesto_electricidad_eur / base_energia_pot
 else:
-    ratio_iee = 0.0511269632 # IEE oficial en España (~5.11%)
+    ratio_iee = 0.0511269632
 
 if 0 < factura_sel.iva_eur < factura_sel.total_factura_eur:
     ratio_iva = factura_sel.iva_eur / factura_sel.base_imponible_eur if factura_sel.base_imponible_eur > 0 else 0.21
 else:
-    ratio_iva = 0.21 # IVA general (21%)
+    ratio_iva = 0.21
 
-# Multiplicadores
-mult_energia_pot = (1.0 + ratio_iee) * (1.0 + ratio_iva) # Aprox. 1.2718
-mult_otros = (1.0 + ratio_iva) # 1.21
+mult_energia_pot = (1.0 + ratio_iee) * (1.0 + ratio_iva)
+mult_otros = (1.0 + ratio_iva)
 
 # Cálculos Punta (P1)
 kwh_p1 = factura_sel.consumo_punta.kwh
@@ -211,26 +202,33 @@ precio_p3_final = precio_p3_base * mult_energia_pot
 gasto_p3_base = factura_sel.consumo_valle.total_eur
 gasto_p3_final = gasto_p3_base * mult_energia_pot
 
-# Totales energía, potencia y otros
+# Totales
 total_energia_base = factura_sel.total_energia_eur
 total_energia_final = round(total_energia_base * mult_energia_pot, 2)
-
 total_potencia_base = factura_sel.total_potencia_eur
 total_potencia_final = round(total_potencia_base * mult_energia_pot, 2)
-
 otros_base = factura_sel.bono_social_eur + factura_sel.alquiler_contador_eur
 otros_final = round(otros_base * mult_otros, 2)
 
-# Pestañas de navegación (Fijas arriba con scroll sticky)
-tab_resumen, tab_graficos, tab_potencia, tab_historico = st.tabs([
-    "📊 Consulta del Mes", 
-    "📈 Hábitos y Evolución", 
-    "🔌 Diagnóstico de Potencia", 
-    "📋 Histórico Completo"
-])
+# ================= CABECERA DE LA PÁGINA PRINCIPAL =================
+st.markdown(f"""
+<div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 18px;">
+    <div style="display: flex; align-items: center; gap: 14px;">
+        <img src="data:image/jpeg;base64,{LOGO_BASE64}" style="width: 44px; height: 44px; border-radius: 10px; box-shadow: 0 4px 15px rgba(255, 152, 0, 0.4); object-fit: cover;">
+        <div>
+            <h2 style="margin: 0; font-size: 1.45rem; font-weight: 700; color: #ffffff; line-height: 1.2;">
+                {seccion_activa}
+            </h2>
+            <div style="font-size: 0.82rem; color: #9aa0a6; margin-top: 2px;">
+                Período: <b style="color: #ff9800;">{factura_sel.fecha_inicio} al {factura_sel.fecha_fin}</b> ({factura_sel.dias_facturados} días) • Tarifa: <b>{factura_sel.tarifa}</b>
+            </div>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-# ================= TAB 1: CONSULTA DEL MES =================
-with tab_resumen:
+# ================= SECCIÓN 1: CONSULTA DEL MES =================
+if seccion_activa == "📊 Consulta del Mes":
     # Tarjetas métricas superiores
     col1, col2, col3, col4 = st.columns(4)
     col1.metric(
@@ -258,7 +256,7 @@ with tab_resumen:
     
     st.divider()
 
-    # Tarjetas rápidas de los 3 tramos
+    # Tarjetas de los 3 tramos
     st.markdown("### ⚡ Consumo y Gasto por Tramo")
     col_t1, col_t2, col_t3 = st.columns(3)
     
@@ -404,9 +402,9 @@ with tab_resumen:
         fig_bars.update_traces(texttemplate='%{text:.2f} €', textposition='outside')
         st.plotly_chart(fig_bars, use_container_width=True)
 
-# ================= TAB 2: HÁBITOS Y EVOLUCIÓN =================
-with tab_graficos:
-    st.subheader(f"Análisis de Hábitos ({factura_sel.fecha_inicio} a {factura_sel.fecha_fin})")
+# ================= SECCIÓN 2: HÁBITOS Y EVOLUCIÓN =================
+elif seccion_activa == "📈 Hábitos y Evolución":
+    st.subheader(f"Análisis de Hábitos ({factura_sel.fecha_inicio} al {factura_sel.fecha_fin})")
     if pct_p3 >= 70:
         st.success(f"🌟 **¡Hábitos de consumo excelentes!** Concentráis el **{pct_p3:.1f}%** de vuestra energía en horario Valle (el tramo más económico a {precio_p3_final:.4f} €/kWh final). Esta tarifa os resulta sumamente rentable.")
     elif pct_p3 >= 50:
@@ -418,7 +416,7 @@ with tab_graficos:
         st.markdown("---")
         st.markdown("#### 📅 Evolución Histórica de Consumo y Gasto")
         hist_data = []
-        for f in facturas:
+        for f in sorted(facturas, key=lambda x: x.fecha_inicio):
             hist_data.append({
                 "Período": f"{f.fecha_inicio} al {f.fecha_fin}",
                 "Factura (€)": f.total_factura_eur,
@@ -452,9 +450,9 @@ with tab_graficos:
     else:
         st.info("ℹ️ Sube más facturas en el menú lateral para ver la comparativa mes a mes.")
 
-# ================= TAB 3: DIAGNÓSTICO DE POTENCIA =================
-with tab_potencia:
-    st.subheader(f"🔌 Optimización de Potencia ({factura_sel.fecha_inicio} a {factura_sel.fecha_fin})")
+# ================= SECCIÓN 3: DIAGNÓSTICO DE POTENCIA =================
+elif seccion_activa == "🔌 Diagnóstico de Potencia":
+    st.subheader(f"🔌 Optimización de Potencia ({factura_sel.fecha_inicio} al {factura_sel.fecha_fin})")
     st.write("Comparativa entre la potencia contratada que pagas cada mes y el pico máximo real que demandaron tus electrodomésticos en el último año según el contador.")
     
     col_p1, col_p2 = st.columns(2)
@@ -487,11 +485,11 @@ with tab_potencia:
         else:
             st.success("✅ Potencia en valle adecuada.")
 
-# ================= TAB 4: HISTÓRICO TABULAR =================
-with tab_historico:
-    st.subheader("📋 Registro de Facturas Analizadas")
+# ================= SECCIÓN 4: HISTÓRICO COMPLETO =================
+elif seccion_activa == "📋 Histórico Completo":
+    st.subheader("📋 Registro Histórico de Facturas Analizadas")
     tabla = []
-    for f in facturas:
+    for f in sorted(facturas, key=lambda x: x.fecha_inicio):
         tabla.append({
             "Nº Factura": f.numero_factura,
             "Inicio": f.fecha_inicio,
