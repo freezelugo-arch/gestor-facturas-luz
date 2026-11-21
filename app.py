@@ -17,31 +17,58 @@ st.set_page_config(
 # Estilos CSS personalizados
 st.markdown("""
 <style>
-    /* Ocultar solo la barra de herramientas de la derecha (Share, Star, Fork, GitHub) */
-    [data-testid="stToolbar"] {
-        display: none !important;
-    }
-    
-    /* Cabecera transparente que no tape el logo */
+    /* Cabecera transparente y accesible */
     header[data-testid="stHeader"] {
         background-color: transparent !important;
-        pointer-events: none;
+        pointer-events: auto !important;
+        z-index: 999 !important;
     }
     
-    /* Mantener visible y clickable el botón para reabrir la barra lateral (>> chevron) */
-    header[data-testid="stHeader"] button,
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="collapsedControl"] {
-        pointer-events: auto !important;
-        display: block !important;
+    /* El toolbar debe estar visible para que el botón de abrir la barra lateral funcione */
+    [data-testid="stToolbar"] {
+        display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
-        color: #ffffff !important;
+    }
+    
+    /* Botón destacado para reabrir la barra lateral (>> chevron) */
+    [data-testid="stExpandSidebarButton"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"],
+    header[data-testid="stHeader"] button[aria-label*="sidebar" i],
+    header[data-testid="stHeader"] button[aria-label*="Sidebar" i] {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        background-color: #ff9800 !important;
+        border: 1px solid #ffa726 !important;
+        border-radius: 8px !important;
+        padding: 5px 12px !important;
+        margin: 6px 10px !important;
+        box-shadow: 0 2px 10px rgba(255, 152, 0, 0.45) !important;
+        cursor: pointer !important;
+        z-index: 999999 !important;
     }
 
-    /* Espaciado del contenedor principal */
+    /* Icono dentro del botón de reabrir menú lateral */
+    [data-testid="stExpandSidebarButton"] svg,
+    header[data-testid="stHeader"] button[aria-label*="sidebar" i] svg {
+        fill: #111111 !important;
+        color: #111111 !important;
+        width: 22px !important;
+        height: 22px !important;
+    }
+
+    /* Ocultar botones de deploy si existen en Streamlit Cloud */
+    .stAppDeployButton,
+    [data-testid="stHeaderActionElements"] {
+        display: none !important;
+    }
+
+    /* Espaciado del contenedor principal para que nada choque con la cabecera */
     .block-container {
-        padding-top: 1.5rem !important;
+        padding-top: 3.5rem !important;
         padding-bottom: 3rem !important;
     }
     
@@ -226,12 +253,23 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# --- Subida rápida de facturas también desde la página principal ---
+with st.expander("📥 ¿Quieres subir una nueva factura de Naturgy? Haz clic aquí", expanded=False):
+    archivos_main = st.file_uploader(
+        "Arrastra o selecciona tus facturas PDF de Naturgy aquí:",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="uploader_pantalla_principal"
+    )
+
+archivos_a_procesar = (archivos_subidos or []) + (archivos_main or [])
+
 # ================= COMPROBACIÓN PREVIA DE FACTURAS SUBIDAS =================
-if archivos_subidos:
-    with st.expander(f"🔍 Comprobación de datos leídos del PDF ({len(archivos_subidos)} archivo/s cargado/s)", expanded=True):
+if archivos_a_procesar:
+    with st.expander(f"🔍 Comprobación de datos leídos del PDF ({len(archivos_a_procesar)} archivo/s cargado/s)", expanded=True):
         st.info("💡 **Revisa los datos extraídos antes de guardar.** Comprueba que los importes, consumos y precios unitarios coinciden con tu factura de Naturgy. Cuando esté verificado, pulsa en el botón verde para guardarla definitivamente en Supabase.")
         
-        for idx, archivo in enumerate(archivos_subidos):
+        for idx, archivo in enumerate(archivos_a_procesar):
             try:
                 f_preview = extraer_factura_naturgy(archivo)
                 st.markdown(f"### 📄 `{archivo.name}` — Factura Nº `{f_preview.numero_factura}`")
