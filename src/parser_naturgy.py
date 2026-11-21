@@ -100,16 +100,16 @@ def extraer_factura_naturgy(pdf_input: Union[str, Path, bytes, io.BytesIO]) -> F
     bono = re.search(r"Financiación\s*de\s*Bono\s*Social.*?([\d,.]+)\s*€", texto_completo)
     bono_eur = _to_float(bono.group(1)) if bono else 0.0
 
-    imp_elec = re.search(r"Impuesto\s*electricidad.*?([\d,.]+)\s*€", texto_completo)
+    imp_elec = re.search(r"Impuesto\s*electricidad.*?%\s*([\d,.]+)\s*€", texto_completo)
     imp_elec_eur = _to_float(imp_elec.group(1)) if imp_elec else 0.0
 
     alquiler = re.search(r"Alquiler\s*de\s*contador.*?([\d,.]+)\s*€", texto_completo)
     alquiler_eur = _to_float(alquiler.group(1)) if alquiler else 0.0
 
-    base = re.search(r"Total\s*base\s*imponible\s*([\d,.]+)\s*€", texto_completo)
+    base = re.search(r"(?:Total\s*base\s*imponible|Total\s*electricidad)\s*([\d,.]+)\s*€", texto_completo)
     base_eur = _to_float(base.group(1)) if base else 0.0
 
-    iva = re.search(r"IVA\s*\(\d+%\).*?([\d,.]+)\s*€", texto_completo)
+    iva = re.search(r"IVA\s*\(\d+%\).*?%\s*([\d,.]+)\s*€", texto_completo)
     iva_eur = _to_float(iva.group(1)) if iva else 0.0
 
     total = re.search(r"Total\s*a\s*pagar\s*([\d,.]+)\s*€", texto_completo)

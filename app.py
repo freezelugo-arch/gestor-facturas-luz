@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from src.parser_naturgy import extraer_factura_naturgy
 from src.db import guardar_factura_en_db, obtener_facturas_de_db
+from src.assets import LOGO_BASE64
 
 # Configuración de la página (optimizada para PC y móvil)
 st.set_page_config(
@@ -13,27 +14,33 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS personalizados: Menú superior fijo (Sticky)
+# Estilos CSS personalizados: Cabecera estrecha, sin espacios muertos y menú sticky
 st.markdown("""
 <style>
-    /* Fijar el menú de pestañas superior para que no se mueva con el scroll */
+    /* Reducir espacio en blanco superior */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 2rem !important;
+    }
+    
+    /* Fijar la barra de pestañas superior al hacer scroll */
+    div[data-testid="stTabs"] {
+        overflow: visible !important;
+    }
     div[data-testid="stTabs"] > div[role="tablist"] {
-        position: sticky;
-        top: 2.875rem;
-        z-index: 999;
-        background-color: var(--background-color, #ffffff);
-        padding-top: 12px;
-        padding-bottom: 10px;
-        border-bottom: 2px solid rgba(128, 128, 128, 0.25);
+        position: -webkit-sticky !important;
+        position: sticky !important;
+        top: 2.875rem !important;
+        z-index: 9999 !important;
+        background-color: var(--background-color, #0e1117) !important;
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+        border-bottom: 2px solid rgba(255, 152, 0, 0.4) !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Título y encabezado
-st.title("⚡ Control y Análisis de Facturas de Luz")
-st.caption("Gestiona tu gasto eléctrico doméstico de forma inteligente (PC y Móvil)")
-
-# Barra lateral para subir archivos
+# Barra lateral: Carga de facturas
 with st.sidebar:
     st.header("📥 Cargar Facturas")
     archivos_subidos = st.file_uploader(
@@ -80,44 +87,66 @@ if not facturas:
     """)
     st.stop()
 
-# Contador de facturas en la barra lateral
-st.sidebar.markdown(f"**Base de datos:** `{len(facturas)} facturas registradas`")
-
 # Ordenar facturas por fecha de inicio (cronológico)
 facturas.sort(key=lambda x: x.fecha_inicio)
 
-# ================= SELECTOR DE PERÍODO / MES E IMPUESTOS =================
-st.markdown("---")
-col_sel, col_imp = st.columns([3, 2])
-
-with col_sel:
+# ================= SELECTOR DE MES E IMPUESTOS EN LA BARRA LATERAL (FIJA) =================
+# Al ponerlo en la barra lateral, NUNCA se sube con el scroll y está siempre visible
+with st.sidebar:
+    st.markdown("---")
+    st.header("🔎 Consulta de Factura")
+    
     opciones_dict = {
         f"📅 {f.fecha_inicio} al {f.fecha_fin} — {f.total_factura_eur:.2f} € ({f.consumo_total_kwh:.0f} kWh)": f
         for f in reversed(facturas)
     }
     sel_label = st.selectbox(
-        "🔎 Selecciona el mes / período que deseas consultar:",
+        "Selecciona el mes / período:",
         list(opciones_dict.keys()),
-        index=0
+        index=0,
+        help="Este menú permanece fijo en la barra lateral para que no se mueva al hacer scroll."
     )
     factura_sel = opciones_dict[sel_label]
-
-with col_imp:
-    st.write("")
+    
     ver_con_impuestos = st.toggle(
-        "🧾 Ver importes con Impuestos (IVA + Elec.)",
+        "🧾 Ver con Impuestos (IVA + Elec.)",
         value=True,
-        help="Aplica el Impuesto Especial de Electricidad (~5.11%) y el IVA (21%) proporcionales a cada tramo para saber el coste final real."
+        help="Aplica el Impuesto Eléctrico (~5.11%) y el IVA (21%) proporcionales a cada tramo para saber el coste final real."
     )
+    st.caption(f"📁 **Total en BD:** `{len(facturas)} facturas registradas`")
+
+# ================= CABECERA COMPACTA Y LOGO =================
+st.markdown(f"""
+<div style="display: flex; align-items: center; gap: 14px; margin-top: -10px; margin-bottom: 10px; padding: 6px 0;">
+    <img src="data:image/jpeg;base64,{LOGO_BASE64}" style="width: 48px; height: 48px; border-radius: 12px; box-shadow: 0 4px 15px rgba(255, 152, 0, 0.4); object-fit: cover;">
+    <div>
+        <h2 style="margin: 0; font-size: 1.45rem; font-weight: 700; color: #ffffff; line-height: 1.2;">
+            Control Facturas de Luz
+        </h2>
+        <div style="font-size: 0.82rem; color: #9aa0a6; margin-top: 2px;">
+            Período activo: <b style="color: #ff9800;">{factura_sel.fecha_inicio} al {factura_sel.fecha_fin}</b> ({factura_sel.dias_facturados} días) • Tarifa: <b>{factura_sel.tarifa}</b>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # ================= CÁLCULO DE RATIOS Y FACTORES DE IMPUESTOS =================
 base_energia_pot = factura_sel.total_energia_eur + factura_sel.total_potencia_eur
-ratio_iee = (factura_sel.impuesto_electricidad_eur / base_energia_pot) if base_energia_pot > 0 else 0.0511269632
-ratio_iva = (factura_sel.iva_eur / factura_sel.base_imponible_eur) if factura_sel.base_imponible_eur > 0 else 0.21
+
+# Aseguramos ratios realistas
+if 0 < factura_sel.impuesto_electricidad_eur < base_energia_pot:
+    ratio_iee = factura_sel.impuesto_electricidad_eur / base_energia_pot
+else:
+    ratio_iee = 0.0511269632 # IEE oficial en España (~5.11%)
+
+if 0 < factura_sel.iva_eur < factura_sel.total_factura_eur:
+    ratio_iva = factura_sel.iva_eur / factura_sel.base_imponible_eur if factura_sel.base_imponible_eur > 0 else 0.21
+else:
+    ratio_iva = 0.21 # IVA general (21%)
 
 # Multiplicadores
-mult_energia_pot = (1.0 + ratio_iee) * (1.0 + ratio_iva)
-mult_otros = (1.0 + ratio_iva)
+mult_energia_pot = (1.0 + ratio_iee) * (1.0 + ratio_iva) # Aprox. 1.2718
+mult_otros = (1.0 + ratio_iva) # 1.21
 
 # Cálculos Punta (P1)
 kwh_p1 = factura_sel.consumo_punta.kwh
@@ -145,15 +174,15 @@ gasto_p3_final = gasto_p3_base * mult_energia_pot
 
 # Totales energía, potencia y otros
 total_energia_base = factura_sel.total_energia_eur
-total_energia_final = gasto_p1_final + gasto_p2_final + gasto_p3_final
+total_energia_final = round(total_energia_base * mult_energia_pot, 2)
 
 total_potencia_base = factura_sel.total_potencia_eur
-total_potencia_final = total_potencia_base * mult_energia_pot
+total_potencia_final = round(total_potencia_base * mult_energia_pot, 2)
 
 otros_base = factura_sel.bono_social_eur + factura_sel.alquiler_contador_eur
-otros_final = otros_base * mult_otros
+otros_final = round(otros_base * mult_otros, 2)
 
-# Pestañas de navegación
+# Pestañas de navegación (Fijas arriba con scroll sticky)
 tab_resumen, tab_graficos, tab_potencia, tab_historico = st.tabs([
     "📊 Consulta del Mes", 
     "📈 Hábitos y Evolución", 
@@ -163,9 +192,6 @@ tab_resumen, tab_graficos, tab_potencia, tab_historico = st.tabs([
 
 # ================= TAB 1: CONSULTA DEL MES =================
 with tab_resumen:
-    st.subheader(f"Período: {factura_sel.fecha_inicio} al {factura_sel.fecha_fin} ({factura_sel.dias_facturados} días)")
-    st.caption(f"**Tarifa:** {factura_sel.tarifa} | **Factura Nº:** `{factura_sel.numero_factura}` | **CUPS:** `{factura_sel.cups or 'No detectado'}`")
-    
     # Tarjetas métricas superiores
     col1, col2, col3, col4 = st.columns(4)
     col1.metric(
@@ -200,7 +226,7 @@ with tab_resumen:
     with col_t1:
         gasto_p1 = gasto_p1_final if ver_con_impuestos else gasto_p1_base
         precio_p1 = precio_p1_final if ver_con_impuestos else precio_p1_base
-        st.error(f"#### 🔴 Punta (P1)\n"
+        st.error(f"#### 🔴 Punta (P1)\n\n"
                  f"**Consumo:** {kwh_p1:.1f} kWh ({pct_p1:.1f}%)\n\n"
                  f"**Gasto:** **{gasto_p1:.2f} €**\n\n"
                  f"**Precio:** {precio_p1:.4f} €/kWh")
@@ -208,7 +234,7 @@ with tab_resumen:
     with col_t2:
         gasto_p2 = gasto_p2_final if ver_con_impuestos else gasto_p2_base
         precio_p2 = precio_p2_final if ver_con_impuestos else precio_p2_base
-        st.warning(f"#### 🟠 Llano (P2)\n"
+        st.warning(f"#### 🟠 Llano (P2)\n\n"
                    f"**Consumo:** {kwh_p2:.1f} kWh ({pct_p2:.1f}%)\n\n"
                    f"**Gasto:** **{gasto_p2:.2f} €**\n\n"
                    f"**Precio:** {precio_p2:.4f} €/kWh")
@@ -216,7 +242,7 @@ with tab_resumen:
     with col_t3:
         gasto_p3 = gasto_p3_final if ver_con_impuestos else gasto_p3_base
         precio_p3 = precio_p3_final if ver_con_impuestos else precio_p3_base
-        st.success(f"#### 🟢 Valle (P3)\n"
+        st.success(f"#### 🟢 Valle (P3)\n\n"
                    f"**Consumo:** {kwh_p3:.1f} kWh ({pct_p3:.1f}%)\n\n"
                    f"**Gasto:** **{gasto_p3:.2f} €**\n\n"
                    f"**Precio:** {precio_p3:.4f} €/kWh")
