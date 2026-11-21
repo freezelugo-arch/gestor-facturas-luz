@@ -14,28 +14,65 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS personalizados: Cabecera estrecha, sin espacios muertos y menú sticky
+# Estilos CSS personalizados: Cabecera y menú superior 100% fijos (Sticky)
 st.markdown("""
 <style>
-    /* Reducir espacio en blanco superior */
-    .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 2rem !important;
+    /* 1. Ocultar la barra superior gris/negra de Streamlit (que tapaba el logo y título) */
+    header[data-testid="stHeader"] {
+        display: none !important;
     }
     
-    /* Fijar la barra de pestañas superior al hacer scroll */
+    /* 2. Mantener accesible el botón de desplegar la barra lateral si se cierra */
+    div[data-testid="collapsedControl"] {
+        display: block !important;
+        position: fixed !important;
+        top: 12px !important;
+        left: 12px !important;
+        z-index: 10000 !important;
+    }
+
+    /* 3. Espaciado superior limpio y holgado para que respire */
+    .block-container {
+        padding-top: 1.2rem !important;
+        padding-bottom: 2rem !important;
+        overflow: visible !important;
+        contain: none !important;
+    }
+
+    /* 4. Desbloquear contain/overflow en los contenedores de Streamlit para que sticky funcione sin fallos */
+    [data-testid="stAppViewContainer"] > section.main {
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+    }
+    div[data-testid="stVerticalBlock"],
+    div[data-testid="stVerticalBlock"] > div,
     div[data-testid="stTabs"] {
         overflow: visible !important;
+        contain: none !important;
     }
+
+    /* 5. Cabecera fija (Logo + Título) al hacer scroll */
+    .sticky-header-container {
+        position: -webkit-sticky !important;
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 9999 !important;
+        background-color: var(--background-color, #0e1117) !important;
+        padding-top: 6px !important;
+        padding-bottom: 10px !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    }
+
+    /* 6. Barra de pestañas fijas justo debajo del título */
     div[data-testid="stTabs"] > div[role="tablist"] {
         position: -webkit-sticky !important;
         position: sticky !important;
-        top: 2.875rem !important;
-        z-index: 9999 !important;
+        top: 66px !important;
+        z-index: 9998 !important;
         background-color: var(--background-color, #0e1117) !important;
         padding-top: 8px !important;
         padding-bottom: 8px !important;
-        border-bottom: 2px solid rgba(255, 152, 0, 0.4) !important;
+        border-bottom: 2px solid rgba(255, 152, 0, 0.5) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -117,14 +154,16 @@ with st.sidebar:
 
 # ================= CABECERA COMPACTA Y LOGO =================
 st.markdown(f"""
-<div style="display: flex; align-items: center; gap: 14px; margin-top: -10px; margin-bottom: 10px; padding: 6px 0;">
-    <img src="data:image/jpeg;base64,{LOGO_BASE64}" style="width: 48px; height: 48px; border-radius: 12px; box-shadow: 0 4px 15px rgba(255, 152, 0, 0.4); object-fit: cover;">
-    <div>
-        <h2 style="margin: 0; font-size: 1.45rem; font-weight: 700; color: #ffffff; line-height: 1.2;">
-            Control Facturas de Luz
-        </h2>
-        <div style="font-size: 0.82rem; color: #9aa0a6; margin-top: 2px;">
-            Período activo: <b style="color: #ff9800;">{factura_sel.fecha_inicio} al {factura_sel.fecha_fin}</b> ({factura_sel.dias_facturados} días) • Tarifa: <b>{factura_sel.tarifa}</b>
+<div class="sticky-header-container">
+    <div style="display: flex; align-items: center; gap: 14px;">
+        <img src="data:image/jpeg;base64,{LOGO_BASE64}" style="width: 48px; height: 48px; border-radius: 12px; box-shadow: 0 4px 15px rgba(255, 152, 0, 0.4); object-fit: cover;">
+        <div>
+            <h2 style="margin: 0; font-size: 1.45rem; font-weight: 700; color: #ffffff; line-height: 1.2;">
+                Control Facturas de Luz
+            </h2>
+            <div style="font-size: 0.82rem; color: #9aa0a6; margin-top: 3px;">
+                Período activo: <b style="color: #ff9800;">{factura_sel.fecha_inicio} al {factura_sel.fecha_fin}</b> ({factura_sel.dias_facturados} días) • Tarifa: <b>{factura_sel.tarifa}</b>
+            </div>
         </div>
     </div>
 </div>
