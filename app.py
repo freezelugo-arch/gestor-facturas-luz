@@ -162,53 +162,54 @@ if not facturas:
     """)
     st.stop()
 
-# ================= CÁLCULO DE RATIOS Y FACTORES DE IMPUESTOS =================
-base_energia_pot = factura_sel.total_energia_eur + factura_sel.total_potencia_eur
+# ================= CÁLCULO EXACTO DE IMPUESTOS POR TRAMO =================
+# Tasas oficiales de la factura de Naturgy sin redondear en cálculos intermedios:
+# 1. Impuesto Especial sobre la Electricidad (IEE): 5.11269632%
+# 2. Impuesto sobre el Valor Añadido (IVA): 21.0%
+IMPUESTO_ELECTRICO = 0.0511269632
+IVA = 0.21
 
-if 0 < factura_sel.impuesto_electricidad_eur < base_energia_pot:
-    ratio_iee = factura_sel.impuesto_electricidad_eur / base_energia_pot
-else:
-    ratio_iee = 0.0511269632
+# Multiplicador exacto de impuestos para energía y potencia: (1 + IEE) * (1 + IVA)
+MULT_IMPUESTOS_ENERGIA = (1.0 + IMPUESTO_ELECTRICO) * (1.0 + IVA) # 1.271863625472
+MULT_IVA_OTROS = 1.0 + IVA # 1.21 (Bono social y alquiler contador solo llevan IVA)
 
-if 0 < factura_sel.iva_eur < factura_sel.total_factura_eur:
-    ratio_iva = factura_sel.iva_eur / factura_sel.base_imponible_eur if factura_sel.base_imponible_eur > 0 else 0.21
-else:
-    ratio_iva = 0.21
+# --- PUNTA (P1) ---
+kwh_p1 = float(factura_sel.consumo_punta.kwh)
+precio_p1_base = float(factura_sel.consumo_punta.precio_kwh)
+gasto_p1_base = kwh_p1 * precio_p1_base
+precio_p1_final = precio_p1_base * MULT_IMPUESTOS_ENERGIA
+gasto_p1_final = gasto_p1_base * MULT_IMPUESTOS_ENERGIA
 
-mult_energia_pot = (1.0 + ratio_iee) * (1.0 + ratio_iva)
-mult_otros = (1.0 + ratio_iva)
+# --- LLANO (P2) ---
+kwh_p2 = float(factura_sel.consumo_llano.kwh)
+precio_p2_base = float(factura_sel.consumo_llano.precio_kwh)
+gasto_p2_base = kwh_p2 * precio_p2_base
+precio_p2_final = precio_p2_base * MULT_IMPUESTOS_ENERGIA
+gasto_p2_final = gasto_p2_base * MULT_IMPUESTOS_ENERGIA
 
-# Cálculos Punta (P1)
-kwh_p1 = factura_sel.consumo_punta.kwh
-pct_p1 = (kwh_p1 / factura_sel.consumo_total_kwh * 100) if factura_sel.consumo_total_kwh > 0 else 0.0
-precio_p1_base = factura_sel.consumo_punta.precio_kwh
-precio_p1_final = precio_p1_base * mult_energia_pot
-gasto_p1_base = factura_sel.consumo_punta.total_eur
-gasto_p1_final = gasto_p1_base * mult_energia_pot
+# --- VALLE (P3) ---
+kwh_p3 = float(factura_sel.consumo_valle.kwh)
+precio_p3_base = float(factura_sel.consumo_valle.precio_kwh)
+gasto_p3_base = kwh_p3 * precio_p3_base
+precio_p3_final = precio_p3_base * MULT_IMPUESTOS_ENERGIA
+gasto_p3_final = gasto_p3_base * MULT_IMPUESTOS_ENERGIA
 
-# Cálculos Llano (P2)
-kwh_p2 = factura_sel.consumo_llano.kwh
-pct_p2 = (kwh_p2 / factura_sel.consumo_total_kwh * 100) if factura_sel.consumo_total_kwh > 0 else 0.0
-precio_p2_base = factura_sel.consumo_llano.precio_kwh
-precio_p2_final = precio_p2_base * mult_energia_pot
-gasto_p2_base = factura_sel.consumo_llano.total_eur
-gasto_p2_final = gasto_p2_base * mult_energia_pot
+# Porcentajes de consumo
+pct_p1 = (kwh_p1 / factura_sel.consumo_total_kwh * 100.0) if factura_sel.consumo_total_kwh > 0 else 0.0
+pct_p2 = (kwh_p2 / factura_sel.consumo_total_kwh * 100.0) if factura_sel.consumo_total_kwh > 0 else 0.0
+pct_p3 = (kwh_p3 / factura_sel.consumo_total_kwh * 100.0) if factura_sel.consumo_total_kwh > 0 else 0.0
 
-# Cálculos Valle (P3)
-kwh_p3 = factura_sel.consumo_valle.kwh
-pct_p3 = (kwh_p3 / factura_sel.consumo_total_kwh * 100) if factura_sel.consumo_total_kwh > 0 else 0.0
-precio_p3_base = factura_sel.consumo_valle.precio_kwh
-precio_p3_final = precio_p3_base * mult_energia_pot
-gasto_p3_base = factura_sel.consumo_valle.total_eur
-gasto_p3_final = gasto_p3_base * mult_energia_pot
+# Totales Energía
+total_energia_base = gasto_p1_base + gasto_p2_base + gasto_p3_base
+total_energia_final = gasto_p1_final + gasto_p2_final + gasto_p3_final
 
-# Totales
-total_energia_base = factura_sel.total_energia_eur
-total_energia_final = round(total_energia_base * mult_energia_pot, 2)
-total_potencia_base = factura_sel.total_potencia_eur
-total_potencia_final = round(total_potencia_base * mult_energia_pot, 2)
-otros_base = factura_sel.bono_social_eur + factura_sel.alquiler_contador_eur
-otros_final = round(otros_base * mult_otros, 2)
+# Potencia fija (P1 + P2)
+total_potencia_base = float(factura_sel.total_potencia_eur)
+total_potencia_final = total_potencia_base * MULT_IMPUESTOS_ENERGIA
+
+# Otros (Alquiler contador + Bono social)
+otros_base = float(factura_sel.bono_social_eur) + float(factura_sel.alquiler_contador_eur)
+otros_final = otros_base * MULT_IVA_OTROS
 
 # ================= CABECERA DE LA PÁGINA PRINCIPAL =================
 st.markdown(f"""
@@ -470,7 +471,7 @@ elif seccion_activa == "🔌 Diagnóstico de Potencia":
         elif pot_max_p1 > (pot_cont_p1 * 0.85):
             st.success("✅ Potencia muy bien ajustada. Estás aprovechando tu potencia sin riesgo de cortes.")
         else:
-            ahorro = (pot_cont_p1 - pot_max_p1) * 365 * factura_sel.potencia_p1.precio_kw_dia * mult_energia_pot
+            ahorro = (pot_cont_p1 - pot_max_p1) * 365 * factura_sel.potencia_p1.precio_kw_dia * MULT_IMPUESTOS_ENERGIA
             st.warning(f"💡 Podrías reducir potencia y ahorrar aproximadamente **{ahorro:.2f} €/año** (con impuestos).")
             
     with col_p2:
