@@ -17,18 +17,26 @@ st.set_page_config(
 # Estilos CSS personalizados
 st.markdown("""
 <style>
-    /* Ocultar barra superior gris de Streamlit para dejar la app limpia */
-    header[data-testid="stHeader"] {
+    /* Ocultar solo la barra de herramientas de la derecha (Share, Star, Fork, GitHub) */
+    [data-testid="stToolbar"] {
         display: none !important;
     }
     
-    /* Botón para volver a abrir la barra lateral si se cierra */
-    div[data-testid="collapsedControl"] {
+    /* Cabecera transparente que no tape el logo */
+    header[data-testid="stHeader"] {
+        background-color: transparent !important;
+        pointer-events: none;
+    }
+    
+    /* Mantener visible y clickable el botón para reabrir la barra lateral (>> chevron) */
+    header[data-testid="stHeader"] button,
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"] {
+        pointer-events: auto !important;
         display: block !important;
-        position: fixed !important;
-        top: 14px !important;
-        left: 14px !important;
-        z-index: 10000 !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        color: #ffffff !important;
     }
 
     /* Espaciado del contenedor principal */
@@ -135,17 +143,7 @@ with st.sidebar:
         label_visibility="collapsed"
     )
     if archivos_subidos:
-        guardadas_ok = 0
-        for archivo in archivos_subidos:
-            try:
-                f = extraer_factura_naturgy(archivo)
-                if guardar_factura_en_db(f):
-                    guardadas_ok += 1
-            except Exception as e:
-                st.error(f"Error en {archivo.name}: {e}")
-        if guardadas_ok > 0:
-            st.success(f"✅ {guardadas_ok} factura(s) sincronizada(s).")
-            st.rerun()
+        st.caption("🔍 Facturas cargadas listas para comprobación.")
 
     if facturas:
         st.caption(f"📁 **Total en BD:** `{len(facturas)} facturas registradas`")
@@ -227,6 +225,61 @@ st.markdown(f"""
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+# ================= COMPROBACIÓN PREVIA DE FACTURAS SUBIDAS =================
+if archivos_subidos:
+    with st.expander(f"🔍 Comprobación de datos leídos del PDF ({len(archivos_subidos)} archivo/s cargado/s)", expanded=True):
+        st.info("💡 **Revisa los datos extraídos antes de guardar.** Comprueba que los importes, consumos y precios unitarios coinciden con tu factura de Naturgy. Cuando esté verificado, pulsa en el botón verde para guardarla definitivamente en Supabase.")
+        
+        for idx, archivo in enumerate(archivos_subidos):
+            try:
+                f_preview = extraer_factura_naturgy(archivo)
+                st.markdown(f"### 📄 `{archivo.name}` — Factura Nº `{f_preview.numero_factura}`")
+                
+                col_p1, col_p2 = st.columns(2)
+                with col_p1:
+                    st.write(f"• **Período:** `{f_preview.fecha_inicio}` al `{f_preview.fecha_fin}` ({f_preview.dias_facturados} días)")
+                    st.write(f"• **Tarifa:** {f_preview.tarifa}")
+                    st.write(f"• **CUPS:** `{f_preview.cups or 'No detectado'}`")
+                with col_p2:
+                    st.write(f"• **Total Factura:** **`{f_preview.total_factura_eur:.2f} €`**")
+                    st.write(f"• **Consumo Total:** **`{f_preview.consumo_total_kwh:.1f} kWh`**")
+                    st.write(f"• **Potencias contratadas:** P1: `{f_preview.potencia_p1.potencia_kw:.2f} kW` | P2: `{f_preview.potencia_p2.potencia_kw:.2f} kW`")
+                
+                # Tabla de comprobación de tramos
+                tramos_check = [
+                    {
+                        "Tramo": "🔴 Punta (P1)",
+                        "Consumo (kWh)": f"{f_preview.consumo_punta.kwh:.1f} kWh",
+                        "Precio (€/kWh)": f"{f_preview.consumo_punta.precio_kwh:.6f} €",
+                        "Gasto Base (€)": f"{f_preview.consumo_punta.total_eur:.2f} €"
+                    },
+                    {
+                        "Tramo": "🟠 Llano (P2)",
+                        "Consumo (kWh)": f"{f_preview.consumo_llano.kwh:.1f} kWh",
+                        "Precio (€/kWh)": f"{f_preview.consumo_llano.precio_kwh:.6f} €",
+                        "Gasto Base (€)": f"{f_preview.consumo_llano.total_eur:.2f} €"
+                    },
+                    {
+                        "Tramo": "🟢 Valle (P3)",
+                        "Consumo (kWh)": f"{f_preview.consumo_valle.kwh:.1f} kWh",
+                        "Precio (€/kWh)": f"{f_preview.consumo_valle.precio_kwh:.6f} €",
+                        "Gasto Base (€)": f"{f_preview.consumo_valle.total_eur:.2f} €"
+                    }
+                ]
+                st.dataframe(pd.DataFrame(tramos_check), use_container_width=True, hide_index=True)
+                
+                btn_col1, btn_col2 = st.columns([3, 4])
+                with btn_col1:
+                    if st.button(f"✅ Guardar en Base de Datos", key=f"btn_save_{idx}", type="primary"):
+                        if guardar_factura_en_db(f_preview):
+                            st.success(f"¡Factura {f_preview.numero_factura} guardada en Supabase con éxito!")
+                            st.rerun()
+                        else:
+                            st.error("Error al guardar en Supabase.")
+                st.markdown("---")
+            except Exception as e:
+                st.error(f"Error procesando el archivo {archivo.name}: {e}")
 
 # ================= SECCIÓN 1: CONSULTA DEL MES =================
 if seccion_activa == "📊 Consulta del Mes":

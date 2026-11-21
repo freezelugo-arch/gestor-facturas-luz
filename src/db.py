@@ -41,12 +41,17 @@ def guardar_factura_en_db(factura: FacturaLuz) -> bool:
         "total_energia_eur": factura.total_energia_eur,
         "consumo_punta_kwh": factura.consumo_punta.kwh,
         "consumo_punta_eur": factura.consumo_punta.total_eur,
+        "precio_punta_eur_kwh": factura.consumo_punta.precio_kwh,
         "consumo_llano_kwh": factura.consumo_llano.kwh,
         "consumo_llano_eur": factura.consumo_llano.total_eur,
+        "precio_llano_eur_kwh": factura.consumo_llano.precio_kwh,
         "consumo_valle_kwh": factura.consumo_valle.kwh,
         "consumo_valle_eur": factura.consumo_valle.total_eur,
+        "precio_valle_eur_kwh": factura.consumo_valle.precio_kwh,
         "potencia_p1_kw": factura.potencia_p1.potencia_kw,
+        "precio_pot_p1_dia": factura.potencia_p1.precio_kw_dia,
         "potencia_p2_kw": factura.potencia_p2.potencia_kw,
+        "precio_pot_p2_dia": factura.potencia_p2.precio_kw_dia,
         "total_potencia_eur": factura.total_potencia_eur,
         "potencia_max_p1": factura.potencia_max_demandada_p1,
         "potencia_max_p2": factura.potencia_max_demandada_p2,
@@ -62,6 +67,13 @@ def guardar_factura_en_db(factura: FacturaLuz) -> bool:
         client.table("facturas").upsert(registro, on_conflict="numero_factura").execute()
         return True
     except Exception as e:
+        # Si falló porque la tabla de Supabase aún no tiene las columnas de precio:
+        try:
+            reg_compat = {k: v for k, v in registro.items() if not k.startswith("precio_")}
+            client.table("facturas").upsert(reg_compat, on_conflict="numero_factura").execute()
+            return True
+        except Exception as e2:
+            print(f"Error guardando factura: {e2}")
         print(f"Error guardando factura {factura.numero_factura}: {e}")
         return False
 
@@ -78,19 +90,27 @@ def obtener_facturas_de_db() -> List[FacturaLuz]:
         for r in filas:
             kwh_p = float(r.get("consumo_punta_kwh") or 0.0)
             eur_p = float(r.get("consumo_punta_eur") or 0.0)
-            p_unit = round(eur_p / kwh_p, 6) if kwh_p > 0 else 0.0
+            p_unit = float(r.get("precio_punta_eur_kwh") or 0.0)
+            if p_unit == 0.0 and kwh_p > 0:
+                p_unit = round(eur_p / kwh_p, 6)
 
             kwh_l = float(r.get("consumo_llano_kwh") or 0.0)
             eur_l = float(r.get("consumo_llano_eur") or 0.0)
-            l_unit = round(eur_l / kwh_l, 6) if kwh_l > 0 else 0.0
+            l_unit = float(r.get("precio_llano_eur_kwh") or 0.0)
+            if l_unit == 0.0 and kwh_l > 0:
+                l_unit = round(eur_l / kwh_l, 6)
 
             kwh_v = float(r.get("consumo_valle_kwh") or 0.0)
             eur_v = float(r.get("consumo_valle_eur") or 0.0)
-            v_unit = round(eur_v / kwh_v, 6) if kwh_v > 0 else 0.0
+            v_unit = float(r.get("precio_valle_eur_kwh") or 0.0)
+            if v_unit == 0.0 and kwh_v > 0:
+                v_unit = round(eur_v / kwh_v, 6)
 
             dias = int(r.get("dias_facturados") or 1)
             pot1 = float(r.get("potencia_p1_kw") or 0.0)
+            pot1_dia = float(r.get("precio_pot_p1_dia") or 0.0)
             pot2 = float(r.get("potencia_p2_kw") or 0.0)
+            pot2_dia = float(r.get("precio_pot_p2_dia") or 0.0)
             tot_pot = float(r.get("total_potencia_eur") or 0.0)
 
             f = FacturaLuz(
@@ -107,8 +127,8 @@ def obtener_facturas_de_db() -> List[FacturaLuz]:
                 consumo_valle=DetalleTramo(kwh=kwh_v, precio_kwh=v_unit, total_eur=eur_v),
                 consumo_total_kwh=float(r.get("consumo_total_kwh") or 0.0),
                 total_energia_eur=float(r.get("total_energia_eur") or 0.0),
-                potencia_p1=DetallePotencia(potencia_kw=pot1, dias=dias, precio_kw_dia=0.0, total_eur=0.0),
-                potencia_p2=DetallePotencia(potencia_kw=pot2, dias=dias, precio_kw_dia=0.0, total_eur=0.0),
+                potencia_p1=DetallePotencia(potencia_kw=pot1, dias=dias, precio_kw_dia=pot1_dia, total_eur=round(pot1*dias*pot1_dia, 2) if pot1_dia > 0 else 0.0),
+                potencia_p2=DetallePotencia(potencia_kw=pot2, dias=dias, precio_kw_dia=pot2_dia, total_eur=round(pot2*dias*pot2_dia, 2) if pot2_dia > 0 else 0.0),
                 total_potencia_eur=tot_pot,
                 bono_social_eur=float(r.get("bono_social_eur") or 0.0),
                 impuesto_electricidad_eur=float(r.get("impuesto_elec_eur") or 0.0),
