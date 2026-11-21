@@ -250,40 +250,52 @@ if seccion_activa == "📊 Consulta del Mes":
     )
     col4.metric(
         "Gasto Energía", 
-        f"{(total_energia_final if ver_con_impuestos else total_energia_base):.2f} €", 
-        f"{'Con Impuestos' if ver_con_impuestos else 'Sin Impuestos'}",
+        f"{total_energia_final:.2f} €", 
+        f"{total_energia_base:.2f} € sin imp.",
         delta_color="off"
     )
     
     st.divider()
 
-    # Tarjetas de los 3 tramos
+    # Tarjetas de los 3 tramos (Mostrando ambos valores: sin y con impuestos)
     st.markdown("### ⚡ Consumo y Gasto por Tramo")
     col_t1, col_t2, col_t3 = st.columns(3)
     
     with col_t1:
-        gasto_p1 = gasto_p1_final if ver_con_impuestos else gasto_p1_base
-        precio_p1 = precio_p1_final if ver_con_impuestos else precio_p1_base
-        st.error(f"#### 🔴 Punta (P1)\n\n"
-                 f"**Consumo:** {kwh_p1:.1f} kWh ({pct_p1:.1f}%)\n\n"
-                 f"**Gasto:** **{gasto_p1:.2f} €**\n\n"
-                 f"**Precio:** {precio_p1:.4f} €/kWh")
+        st.error(
+            f"#### 🔴 Punta (P1)\n\n"
+            f"**Consumo:** {kwh_p1:.1f} kWh ({pct_p1:.1f}%)\n\n"
+            f"**Gasto:**\n"
+            f"• Sin imp.: **{gasto_p1_base:.2f} €**\n"
+            f"• Con imp.: **{gasto_p1_final:.2f} €**\n\n"
+            f"**Precio:**\n"
+            f"• Sin imp.: **{precio_p1_base:.4f} €/kWh**\n"
+            f"• Con imp.: **{precio_p1_final:.4f} €/kWh**"
+        )
                  
     with col_t2:
-        gasto_p2 = gasto_p2_final if ver_con_impuestos else gasto_p2_base
-        precio_p2 = precio_p2_final if ver_con_impuestos else precio_p2_base
-        st.warning(f"#### 🟠 Llano (P2)\n\n"
-                   f"**Consumo:** {kwh_p2:.1f} kWh ({pct_p2:.1f}%)\n\n"
-                   f"**Gasto:** **{gasto_p2:.2f} €**\n\n"
-                   f"**Precio:** {precio_p2:.4f} €/kWh")
+        st.warning(
+            f"#### 🟠 Llano (P2)\n\n"
+            f"**Consumo:** {kwh_p2:.1f} kWh ({pct_p2:.1f}%)\n\n"
+            f"**Gasto:**\n"
+            f"• Sin imp.: **{gasto_p2_base:.2f} €**\n"
+            f"• Con imp.: **{gasto_p2_final:.2f} €**\n\n"
+            f"**Precio:**\n"
+            f"• Sin imp.: **{precio_p2_base:.4f} €/kWh**\n"
+            f"• Con imp.: **{precio_p2_final:.4f} €/kWh**"
+        )
                    
     with col_t3:
-        gasto_p3 = gasto_p3_final if ver_con_impuestos else gasto_p3_base
-        precio_p3 = precio_p3_final if ver_con_impuestos else precio_p3_base
-        st.success(f"#### 🟢 Valle (P3)\n\n"
-                   f"**Consumo:** {kwh_p3:.1f} kWh ({pct_p3:.1f}%)\n\n"
-                   f"**Gasto:** **{gasto_p3:.2f} €**\n\n"
-                   f"**Precio:** {precio_p3:.4f} €/kWh")
+        st.success(
+            f"#### 🟢 Valle (P3)\n\n"
+            f"**Consumo:** {kwh_p3:.1f} kWh ({pct_p3:.1f}%)\n\n"
+            f"**Gasto:**\n"
+            f"• Sin imp.: **{gasto_p3_base:.2f} €**\n"
+            f"• Con imp.: **{gasto_p3_final:.2f} €**\n\n"
+            f"**Precio:**\n"
+            f"• Sin imp.: **{precio_p3_base:.4f} €/kWh**\n"
+            f"• Con imp.: **{precio_p3_final:.4f} €/kWh**"
+        )
 
     # Tabla comparativa completa
     st.markdown("### 📋 Desglose Completo: Sin Impuestos vs Con Impuestos")
