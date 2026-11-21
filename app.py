@@ -304,50 +304,39 @@ if seccion_activa == "📊 Consulta del Mes":
     col4.metric(
         "Gasto Energía", 
         f"{total_energia_final:.2f} €", 
-        f"{total_energia_base:.2f} € sin imp.",
+        f"Base: {total_energia_base:.2f} €",
         delta_color="off"
     )
     
     st.divider()
 
-    # Tarjetas de los 3 tramos (Mostrando ambos valores: sin y con impuestos)
+    # Tarjetas de los 3 tramos (Mostrando importe real y base de forma limpia y compacta)
     st.markdown("### ⚡ Consumo y Gasto por Tramo")
+    st.caption("Importe final con impuestos (IVA + IEE) y tarifa base de contrato entre paréntesis.")
     col_t1, col_t2, col_t3 = st.columns(3)
     
     with col_t1:
         st.error(
             f"#### 🔴 Punta (P1)\n\n"
             f"**Consumo:** {kwh_p1:.1f} kWh ({pct_p1:.1f}%)\n\n"
-            f"**Gasto:**\n"
-            f"• Sin imp.: **{gasto_p1_base:.2f} €**\n"
-            f"• Con imp.: **{gasto_p1_final:.2f} €**\n\n"
-            f"**Precio:**\n"
-            f"• Sin imp.: **{precio_p1_base:.4f} €/kWh**\n"
-            f"• Con imp.: **{precio_p1_final:.4f} €/kWh**"
+            f"**Gasto:** **{gasto_p1_final:.2f} €** *(base: {gasto_p1_base:.2f} €)*\n\n"
+            f"**Precio:** **{precio_p1_final:.4f} €/kWh** *(base: {precio_p1_base:.4f} €)*"
         )
                  
     with col_t2:
         st.warning(
             f"#### 🟠 Llano (P2)\n\n"
             f"**Consumo:** {kwh_p2:.1f} kWh ({pct_p2:.1f}%)\n\n"
-            f"**Gasto:**\n"
-            f"• Sin imp.: **{gasto_p2_base:.2f} €**\n"
-            f"• Con imp.: **{gasto_p2_final:.2f} €**\n\n"
-            f"**Precio:**\n"
-            f"• Sin imp.: **{precio_p2_base:.4f} €/kWh**\n"
-            f"• Con imp.: **{precio_p2_final:.4f} €/kWh**"
+            f"**Gasto:** **{gasto_p2_final:.2f} €** *(base: {gasto_p2_base:.2f} €)*\n\n"
+            f"**Precio:** **{precio_p2_final:.4f} €/kWh** *(base: {precio_p2_base:.4f} €)*"
         )
                    
     with col_t3:
         st.success(
             f"#### 🟢 Valle (P3)\n\n"
             f"**Consumo:** {kwh_p3:.1f} kWh ({pct_p3:.1f}%)\n\n"
-            f"**Gasto:**\n"
-            f"• Sin imp.: **{gasto_p3_base:.2f} €**\n"
-            f"• Con imp.: **{gasto_p3_final:.2f} €**\n\n"
-            f"**Precio:**\n"
-            f"• Sin imp.: **{precio_p3_base:.4f} €/kWh**\n"
-            f"• Con imp.: **{precio_p3_final:.4f} €/kWh**"
+            f"**Gasto:** **{gasto_p3_final:.2f} €** *(base: {gasto_p3_base:.2f} €)*\n\n"
+            f"**Precio:** **{precio_p3_final:.4f} €/kWh** *(base: {precio_p3_base:.4f} €)*"
         )
 
     # Tabla comparativa completa
