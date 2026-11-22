@@ -111,7 +111,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-def _renderizar_paginas_pdf(pdf_bytes: bytes, scale: float = 1.8):
+def _renderizar_paginas_pdf(pdf_bytes: bytes, scale: float = 2.0):
     pdf = pdfium.PdfDocument(pdf_bytes)
     try:
         return [pdf[i].render(scale=scale).to_pil() for i in range(len(pdf))]
@@ -211,10 +211,19 @@ if not facturas:
 
 archivos_a_procesar = list(archivos_subidos or []) + list(archivos_main or [])
 
-# ================= DOBLE PANTALLA: EDICIÓN A LA IZQUIERDA + PDF A LA DERECHA =================
+# ================= REVISIÓN PREVIA: PDF + FORMULARIO EDITABLE =================
 if archivos_a_procesar:
-    st.markdown("### 🔍 Revisión Previa en Doble Pantalla antes de Guardar")
-    st.caption("Comprueba y edita los datos extraídos en la columna izquierda comparando visualmente con el PDF en la columna derecha.")
+    st.markdown("### 🔍 Revisión Previa antes de Guardar")
+    col_info, col_modo = st.columns([2, 1])
+    with col_info:
+        st.caption("Comprueba los datos extraídos comparando con el PDF original antes de guardar en Supabase.")
+    with col_modo:
+        modo_vista = st.radio(
+            "Disposición:",
+            ["📱 Apilada (Ancho completo)", "🖥️ Lado a lado"],
+            horizontal=True,
+            label_visibility="collapsed",
+        )
 
     for idx, archivo in enumerate(archivos_a_procesar):
         pdf_bytes = archivo.getvalue()
@@ -223,21 +232,56 @@ if archivos_a_procesar:
         if cache_key not in st.session_state:
             try:
                 f_base = extraer_factura_naturgy(io.BytesIO(pdf_bytes))
-                imgs_pdf = _renderizar_paginas_pdf(pdf_bytes, scale=1.8)
+                imgs_pdf = _renderizar_paginas_pdf(pdf_bytes, scale=2.0)
                 st.session_state[cache_key] = (f_base, imgs_pdf, None)
             except Exception as e:
                 st.session_state[cache_key] = (None, [], str(e))
 
         f_preview, paginas_pdf, err_msg = st.session_state[cache_key]
 
-        with st.expander(f"📄 `{archivo.name}` — Factura Nº `{f_preview.numero_factura if f_preview else 'Error'}`", expanded=True):
+        with st.expander(
+            f"📄 `{archivo.name}` — Factura Nº `{f_preview.numero_factura if f_preview else 'Error'}`",
+            expanded=True,
+        ):
             if err_msg or f_preview is None:
                 st.error(f"Error procesando el archivo {archivo.name}: {err_msg}")
                 continue
 
-            col_izq_edit, col_der_pdf = st.columns([1.05, 1], gap="large")
+            if modo_vista == "🖥️ Lado a lado":
+                zona_pdf, zona_form = st.columns([1.1, 1], gap="large")
+                altura_visor = 760
+            else:
+                zona_pdf = st.container()
+                st.divider()
+                zona_form = st.container()
+                altura_visor = 520
 
-            with col_izq_edit:
+            # --- VISOR DEL PDF ---
+            with zona_pdf:
+                st.markdown("#### 📄 Documento Original")
+                opciones_pag = ["Todas las páginas (scroll)"] + [
+                    f"Página {i}" for i in range(1, len(paginas_pdf) + 1)
+                ]
+                pag_sel = st.selectbox(
+                    "Página a visualizar:",
+                    opciones_pag,
+                    index=0,
+                    key=f"sel_pag_{idx}_{archivo.name}",
+                    label_visibility="collapsed",
+                )
+
+                with st.container(height=altura_visor):
+                    if pag_sel == "Todas las páginas (scroll)":
+                        for n_pag, img_pag in enumerate(paginas_pdf, start=1):
+                            st.caption(f"Página {n_pag} de {len(paginas_pdf)}")
+                            st.image(img_pag, use_container_width=True)
+                    else:
+                        n_pag = int(pag_sel.split()[-1])
+                        st.caption(f"Página {n_pag} de {len(paginas_pdf)}")
+                        st.image(paginas_pdf[n_pag - 1], use_container_width=True)
+
+            # --- FORMULARIO EDITABLE ---
+            with zona_form:
                 st.markdown("#### ✏️ Datos Extraídos (Editables)")
                 with st.form(key=f"form_editar_{idx}_{archivo.name}"):
                     c1, c2 = st.columns(2)
@@ -250,7 +294,9 @@ if archivos_a_procesar:
                     f_fin_val = c5.text_input("Fecha Fin", value=f_preview.fecha_fin)
 
                     c6, c7 = st.columns(2)
-                    dias_val = int(c6.number_input("Días Facturados", value=int(f_preview.dias_facturados), min_value=1, step=1))
+                    dias_val = int(
+                        c6.number_input("Días Facturados", value=int(f_preview.dias_facturados), min_value=1, step=1)
+                    )
                     tarifa_val = c7.text_input("Tarifa", value=f_preview.tarifa or "")
 
                     st.markdown("**Consumo por Tramos**")
@@ -283,7 +329,11 @@ if archivos_a_procesar:
                     iva_val = fin_c2.number_input("IVA (€)", value=float(f_preview.iva_eur), format="%.2f")
                     tot_fac_val = fin_c3.number_input("TOTAL FACTURA (€)", value=float(f_preview.total_factura_eur), format="%.2f")
 
-                    guardar_btn = st.form_submit_button("✅ Confirmar y Guardar en Base de Datos", type="primary", use_container_width=True)
+                    guardar_btn = st.form_submit_button(
+                        "✅ Confirmar y Guardar en Base de Datos",
+                        type="primary",
+                        use_container_width=True,
+                    )
 
                     if guardar_btn:
                         tot_kwh_calc = round(float(p_kwh) + float(l_kwh) + float(v_kwh), 2)
@@ -345,13 +395,6 @@ if archivos_a_procesar:
                             st.rerun()
                         else:
                             st.error("Error al guardar en Supabase. Revisa `.env` y la conexión.")
-
-            with col_der_pdf:
-                st.markdown("#### 📄 Visor del PDF Original")
-                with st.container(height=760):
-                    for n_pag, img_pag in enumerate(paginas_pdf, start=1):
-                        st.caption(f"Página {n_pag} de {len(paginas_pdf)}")
-                        st.image(img_pag, use_container_width=True)
 
 if not factura_sel:
     st.stop()
