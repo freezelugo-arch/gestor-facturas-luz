@@ -1,17 +1,20 @@
 import os
-from dotenv import load_dotenv
-from supabase import create_client, Client
+from datetime import datetime
 from typing import List, Optional
 
+from dotenv import load_dotenv
+from supabase import Client, create_client
+
 try:
-    from .models import FacturaLuz, DetalleTramo, DetallePotencia
+    from .models import DetallePotencia, DetalleTramo, FacturaLuz
 except ImportError:
-    from models import FacturaLuz, DetalleTramo, DetallePotencia
+    from models import DetallePotencia, DetalleTramo, FacturaLuz
 
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+
 
 def get_supabase_client() -> Optional[Client]:
     if not SUPABASE_URL or not SUPABASE_KEY:
@@ -22,12 +25,27 @@ def get_supabase_client() -> Optional[Client]:
         print(f"Error conectando a Supabase: {e}")
         return None
 
+
+def _clave_orden_fecha(fecha_str: Optional[str]) -> tuple:
+    """Devuelve una clave cronológica tanto para 'DD/MM/YYYY' como para 'YYYY-MM-DD'."""
+    if not fecha_str:
+        return (0, 0, 0)
+    s = fecha_str.strip()
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            return (dt.year, dt.month, dt.day)
+        except ValueError:
+            continue
+    return (0, 0, 0)
+
+
 def guardar_factura_en_db(factura: FacturaLuz) -> bool:
     """Guarda o actualiza una factura en la base de datos Supabase."""
     client = get_supabase_client()
     if not client:
         return False
-    
+
     registro = {
         "numero_factura": factura.numero_factura,
         "compania": factura.compania,
@@ -62,12 +80,11 @@ def guardar_factura_en_db(factura: FacturaLuz) -> bool:
         "iva_eur": factura.iva_eur,
         "total_factura_eur": factura.total_factura_eur,
     }
-    
+
     try:
         client.table("facturas").upsert(registro, on_conflict="numero_factura").execute()
         return True
     except Exception as e:
-        # Si falló porque la tabla de Supabase aún no tiene las columnas de precio:
         try:
             reg_compat = {k: v for k, v in registro.items() if not k.startswith("precio_")}
             client.table("facturas").upsert(reg_compat, on_conflict="numero_factura").execute()
@@ -77,15 +94,17 @@ def guardar_factura_en_db(factura: FacturaLuz) -> bool:
         print(f"Error guardando factura {factura.numero_factura}: {e}")
         return False
 
+
 def obtener_facturas_de_db() -> List[FacturaLuz]:
-    """Recupera todas las facturas guardadas en Supabase ordenadas por fecha."""
+    """Recupera todas las facturas guardadas en Supabase ordenadas cronológicamente."""
     client = get_supabase_client()
     if not client:
         return []
-    
+
     try:
-        res = client.table("facturas").select("*").order("fecha_inicio", desc=False).execute()
+        res = client.table("facturas").select("*").execute()
         filas = res.data or []
+        filas.sort(key=lambda x: _clave_orden_fecha(x.get("fecha_inicio")))
         facturas = []
         for r in filas:
             kwh_p = float(r.get("consumo_punta_kwh") or 0.0)
@@ -113,6 +132,12 @@ def obtener_facturas_de_db() -> List[FacturaLuz]:
             pot2_dia = float(r.get("precio_pot_p2_dia") or 0.0)
             tot_pot = float(r.get("total_potencia_eur") or 0.0)
 
+            eur_pot1 = round(pot1 * dias * pot1_dia, 2) if pot1_dia > 0 else 0.0
+            eur_pot2 = round(pot2 * dias * pot2_dia, 2) if pot2_dia > 0 else 0.0
+            if eur_pot1 == 0.0 and eur_pot2 == 0.0 and tot_pot > 0.0:
+                eur_pot1 = round(tot_pot / 2.0, 2)
+                eur_pot2 = round(tot_pot - eur_pot1, 2)
+
             f = FacturaLuz(
                 compania=r.get("compania") or "Naturgy",
                 numero_factura=r.get("numero_factura"),
@@ -127,8 +152,12 @@ def obtener_facturas_de_db() -> List[FacturaLuz]:
                 consumo_valle=DetalleTramo(kwh=kwh_v, precio_kwh=v_unit, total_eur=eur_v),
                 consumo_total_kwh=float(r.get("consumo_total_kwh") or 0.0),
                 total_energia_eur=float(r.get("total_energia_eur") or 0.0),
-                potencia_p1=DetallePotencia(potencia_kw=pot1, dias=dias, precio_kw_dia=pot1_dia, total_eur=round(pot1*dias*pot1_dia, 2) if pot1_dia > 0 else 0.0),
-                potencia_p2=DetallePotencia(potencia_kw=pot2, dias=dias, precio_kw_dia=pot2_dia, total_eur=round(pot2*dias*pot2_dia, 2) if pot2_dia > 0 else 0.0),
+                potencia_p1=DetallePotencia(
+                    potencia_kw=pot1, dias=dias, precio_kw_dia=pot1_dia, total_eur=eur_pot1
+                ),
+                potencia_p2=DetallePotencia(
+                    potencia_kw=pot2, dias=dias, precio_kw_dia=pot2_dia, total_eur=eur_pot2
+                ),
                 total_potencia_eur=tot_pot,
                 bono_social_eur=float(r.get("bono_social_eur") or 0.0),
                 impuesto_electricidad_eur=float(r.get("impuesto_elec_eur") or 0.0),
@@ -136,8 +165,12 @@ def obtener_facturas_de_db() -> List[FacturaLuz]:
                 base_imponible_eur=float(r.get("base_imponible_eur") or 0.0),
                 iva_eur=float(r.get("iva_eur") or 0.0),
                 total_factura_eur=float(r.get("total_factura_eur") or 0.0),
-                potencia_max_demandada_p1=float(r.get("potencia_max_p1")) if r.get("potencia_max_p1") is not None else None,
-                potencia_max_demandada_p2=float(r.get("potencia_max_p2")) if r.get("potencia_max_p2") is not None else None
+                potencia_max_demandada_p1=(
+                    float(r.get("potencia_max_p1")) if r.get("potencia_max_p1") is not None else None
+                ),
+                potencia_max_demandada_p2=(
+                    float(r.get("potencia_max_p2")) if r.get("potencia_max_p2") is not None else None
+                ),
             )
             facturas.append(f)
         return facturas

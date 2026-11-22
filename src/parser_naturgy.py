@@ -1,13 +1,15 @@
-import re
-import pdfplumber
-from typing import Union
-from pathlib import Path
 import io
+import re
+from pathlib import Path
+from typing import Optional, Union
+
+import pdfplumber
 
 try:
-    from .models import FacturaLuz, DetalleTramo, DetallePotencia
+    from .models import DetallePotencia, DetalleTramo, FacturaLuz
 except ImportError:
-    from models import FacturaLuz, DetalleTramo, DetallePotencia
+    from models import DetallePotencia, DetalleTramo, FacturaLuz
+
 
 def _to_float(valor_str: str) -> float:
     """Convierte importes y números en formato español (coma decimal) a float."""
@@ -19,6 +21,18 @@ def _to_float(valor_str: str) -> float:
     elif "," in limpio:
         limpio = limpio.replace(",", ".")
     return float(limpio)
+
+
+def fecha_es_a_iso(fecha_str: Optional[str]) -> Optional[str]:
+    """Convierte 'DD/MM/YYYY' a 'YYYY-MM-DD' para ordenar correctamente en BD."""
+    if not fecha_str:
+        return None
+    m = re.match(r"^(\d{2})/(\d{2})/(\d{4})$", fecha_str.strip())
+    if not m:
+        return fecha_str
+    dia, mes, anio = m.groups()
+    return f"{anio}-{mes}-{dia}"
+
 
 def extraer_factura_naturgy(pdf_input: Union[str, Path, bytes, io.BytesIO]) -> FacturaLuz:
     """
@@ -39,11 +53,14 @@ def extraer_factura_naturgy(pdf_input: Union[str, Path, bytes, io.BytesIO]) -> F
     fecha_emision = fecha_emision.group(1) if fecha_emision else None
 
     # Período: del 24/07/2026 al 24/08/2026
-    periodo = re.search(r"Período\s*electricidad(?:\s*del)?\s*(\d{2}/\d{2}/\d{4})\s*al\s*(\d{2}/\d{2}/\d{4})", texto_completo)
+    periodo = re.search(
+        r"Período\s*electricidad(?:\s*del)?\s*(\d{2}/\d{2}/\d{4})\s*al\s*(\d{2}/\d{2}/\d{4})",
+        texto_completo,
+    )
     f_inicio = periodo.group(1) if periodo else "01/01/2000"
     f_fin = periodo.group(2) if periodo else "01/01/2000"
 
-    # Días exactos facturados (los sacamos de la línea de potencia o de contrato)
+    # Días exactos facturados
     dias_match = re.search(r"Término\s*potencia\s*P1.*?x\s*(\d+)\s*días", texto_completo)
     if not dias_match:
         dias_match = re.search(r"Contrato:.*?\n\s*(\d+)\s*días", texto_completo)
@@ -52,10 +69,8 @@ def extraer_factura_naturgy(pdf_input: Union[str, Path, bytes, io.BytesIO]) -> F
     cups = re.search(r"Código\s*CUPS:\s*([A-Z0-9]+)", texto_completo)
     cups = cups.group(1) if cups else None
 
-    # Tarifa (captura si está en una o dos líneas, ej: Tarifa Noche Luz ECO)
-        # Tarifa limpia:
+    # Tarifa limpia
     tarifa_match = re.search(r"(Tarifa\s+[\w\s]+?ECO)", texto_completo)
-    tarifa = " ".join(tarifa_match.group(1).split()) if tarifa_match else "Tarifa Noche Luz ECO"
     if tarifa_match:
         tarifa = " ".join(tarifa_match.group(1).split())
     else:
@@ -69,7 +84,7 @@ def extraer_factura_naturgy(pdf_input: Union[str, Path, bytes, io.BytesIO]) -> F
             return DetalleTramo(
                 kwh=_to_float(m.group(1)),
                 precio_kwh=_to_float(m.group(2)),
-                total_eur=_to_float(m.group(3))
+                total_eur=_to_float(m.group(3)),
             )
         return DetalleTramo(kwh=0.0, precio_kwh=0.0, total_eur=0.0)
 
@@ -81,14 +96,17 @@ def extraer_factura_naturgy(pdf_input: Union[str, Path, bytes, io.BytesIO]) -> F
 
     # 3. Término de potencia
     def extraer_potencia(periodo_p: str) -> DetallePotencia:
-        patron = rf"Término\s*potencia\s*{periodo_p}\s*([\d,.]+)\s*kW\s*x\s*(\d+)\s*días\s*x\s*([\d,.]+)\s*€/kW\s*día\s*([\d,.]+)\s*€"
+        patron = (
+            rf"Término\s*potencia\s*{periodo_p}\s*([\d,.]+)\s*kW\s*x\s*(\d+)\s*días\s*x\s*"
+            rf"([\d,.]+)\s*€/kW\s*día\s*([\d,.]+)\s*€"
+        )
         m = re.search(patron, texto_completo)
         if m:
             return DetallePotencia(
                 potencia_kw=_to_float(m.group(1)),
                 dias=int(m.group(2)),
                 precio_kw_dia=_to_float(m.group(3)),
-                total_eur=_to_float(m.group(4))
+                total_eur=_to_float(m.group(4)),
             )
         return DetallePotencia(potencia_kw=0.0, dias=dias_facturados, precio_kw_dia=0.0, total_eur=0.0)
 
@@ -106,7 +124,9 @@ def extraer_factura_naturgy(pdf_input: Union[str, Path, bytes, io.BytesIO]) -> F
     alquiler = re.search(r"Alquiler\s*de\s*contador.*?([\d,.]+)\s*€", texto_completo)
     alquiler_eur = _to_float(alquiler.group(1)) if alquiler else 0.0
 
-    base = re.search(r"(?:Total\s*base\s*imponible|Total\s*electricidad)\s*([\d,.]+)\s*€", texto_completo)
+    base = re.search(r"Total\s*base\s*imponible\s*([\d,.]+)\s*€", texto_completo)
+    if not base:
+        base = re.search(r"Total\s*electricidad\s*([\d,.]+)\s*€", texto_completo)
     base_eur = _to_float(base.group(1)) if base else 0.0
 
     iva = re.search(r"IVA\s*\(\d+%\).*?%\s*([\d,.]+)\s*€", texto_completo)
@@ -116,7 +136,10 @@ def extraer_factura_naturgy(pdf_input: Union[str, Path, bytes, io.BytesIO]) -> F
     total_eur = _to_float(total.group(1)) if total else 0.0
 
     # 5. Potencias máximas demandadas
-    pmax = re.search(r"máximas\s*demandadas.*?([\d,.]+)\s*kW\s*en\s*P1.*?([\d,.]+)\s*kW\s*en\s*P2", texto_completo)
+    pmax = re.search(
+        r"máximas\s*demandadas.*?([\d,.]+)\s*kW\s*en\s*P1.*?([\d,.]+)\s*kW\s*en\s*P2",
+        texto_completo,
+    )
     pmax_p1 = _to_float(pmax.group(1)) if pmax else None
     pmax_p2 = _to_float(pmax.group(2)) if pmax else None
 
@@ -143,5 +166,5 @@ def extraer_factura_naturgy(pdf_input: Union[str, Path, bytes, io.BytesIO]) -> F
         iva_eur=iva_eur,
         total_factura_eur=total_eur,
         potencia_max_demandada_p1=pmax_p1,
-        potencia_max_demandada_p2=pmax_p2
+        potencia_max_demandada_p2=pmax_p2,
     )
