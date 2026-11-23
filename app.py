@@ -81,6 +81,11 @@ st.markdown("""
         padding-bottom: 3rem !important;
     }
 
+    /* Compactar ligeramente los inputs dentro de formularios en horizontal */
+    [data-testid="stForm"] [data-testid="stVerticalBlock"] {
+        gap: 0.45rem !important;
+    }
+
     /* Botón flotante para volver arriba al hacer scroll */
     .floating-top-btn {
         position: fixed;
@@ -211,7 +216,7 @@ if not facturas:
 
 archivos_a_procesar = list(archivos_subidos or []) + list(archivos_main or [])
 
-# ================= REVISIÓN PREVIA: PDF + FORMULARIO EDITABLE =================
+# ================= REVISIÓN PREVIA: PDF + FORMULARIO COMPACTO EN HORIZONTAL =================
 if archivos_a_procesar:
     st.markdown("### 🔍 Revisión Previa antes de Guardar")
     col_info, col_modo = st.columns([2, 1])
@@ -248,27 +253,29 @@ if archivos_a_procesar:
                 continue
 
             if modo_vista == "🖥️ Lado a lado":
-                zona_pdf, zona_form = st.columns([1.1, 1], gap="large")
-                altura_visor = 760
+                zona_pdf, zona_form = st.columns([1.05, 1.15], gap="large")
+                altura_visor = 680
             else:
                 zona_pdf = st.container()
-                st.divider()
                 zona_form = st.container()
-                altura_visor = 520
+                altura_visor = 430
 
             # --- VISOR DEL PDF ---
             with zona_pdf:
-                st.markdown("#### 📄 Documento Original")
-                opciones_pag = ["Todas las páginas (scroll)"] + [
-                    f"Página {i}" for i in range(1, len(paginas_pdf) + 1)
-                ]
-                pag_sel = st.selectbox(
-                    "Página a visualizar:",
-                    opciones_pag,
-                    index=0,
-                    key=f"sel_pag_{idx}_{archivo.name}",
-                    label_visibility="collapsed",
-                )
+                c_tit_pdf, c_pag_pdf = st.columns([2, 1])
+                with c_tit_pdf:
+                    st.markdown("#### 📄 Documento Original")
+                with c_pag_pdf:
+                    opciones_pag = ["Todas las páginas (scroll)"] + [
+                        f"Página {i}" for i in range(1, len(paginas_pdf) + 1)
+                    ]
+                    pag_sel = st.selectbox(
+                        "Página a visualizar:",
+                        opciones_pag,
+                        index=0,
+                        key=f"sel_pag_{idx}_{archivo.name}",
+                        label_visibility="collapsed",
+                    )
 
                 with st.container(height=altura_visor):
                     if pag_sel == "Todas las páginas (scroll)":
@@ -280,54 +287,58 @@ if archivos_a_procesar:
                         st.caption(f"Página {n_pag} de {len(paginas_pdf)}")
                         st.image(paginas_pdf[n_pag - 1], use_container_width=True)
 
-            # --- FORMULARIO EDITABLE ---
+            # --- FORMULARIO EDITABLE COMPACTO (MÁS CAMPOS POR LÍNEA) ---
             with zona_form:
                 st.markdown("#### ✏️ Datos Extraídos (Editables)")
                 with st.form(key=f"form_editar_{idx}_{archivo.name}"):
-                    c1, c2 = st.columns(2)
-                    num_fac = c1.text_input("Nº Factura", value=f_preview.numero_factura)
-                    cups_val = c2.text_input("CUPS", value=f_preview.cups or "")
-
-                    c3, c4, c5 = st.columns(3)
-                    f_emi = c3.text_input("Fecha Emisión", value=f_preview.fecha_emision or "")
-                    f_ini = c4.text_input("Fecha Inicio", value=f_preview.fecha_inicio)
-                    f_fin_val = c5.text_input("Fecha Fin", value=f_preview.fecha_fin)
-
-                    c6, c7 = st.columns(2)
+                    # Fila 1: Identificación y fechas en una sola línea (6 columnas)
+                    r1_1, r1_2, r1_3, r1_4, r1_5, r1_6 = st.columns([1.3, 1.6, 1, 1, 1, 0.7])
+                    num_fac = r1_1.text_input("Nº Factura", value=f_preview.numero_factura)
+                    cups_val = r1_2.text_input("CUPS", value=f_preview.cups or "")
+                    f_emi = r1_3.text_input("Emisión", value=f_preview.fecha_emision or "")
+                    f_ini = r1_4.text_input("Inicio", value=f_preview.fecha_inicio)
+                    f_fin_val = r1_5.text_input("Fin", value=f_preview.fecha_fin)
                     dias_val = int(
-                        c6.number_input("Días Facturados", value=int(f_preview.dias_facturados), min_value=1, step=1)
+                        r1_6.number_input("Días", value=int(f_preview.dias_facturados), min_value=1, step=1)
                     )
-                    tarifa_val = c7.text_input("Tarifa", value=f_preview.tarifa or "")
 
-                    st.markdown("**Consumo por Tramos**")
-                    t1, t2, t3 = st.columns(3)
-                    p_kwh = t1.number_input("Punta (kWh)", value=float(f_preview.consumo_punta.kwh), format="%.2f")
-                    p_eur = t1.number_input("Punta Base (€)", value=float(f_preview.consumo_punta.total_eur), format="%.2f")
-                    p_prec = t1.number_input("Precio Punta (€/kWh)", value=float(f_preview.consumo_punta.precio_kwh), format="%.6f")
+                    # Fila 2: Tarifa + Consumo Punta (kWh, €/kWh, €) en una sola línea (5 columnas)
+                    r2_1, r2_2, r2_3, r2_4 = st.columns([1.8, 1, 1.1, 1])
+                    tarifa_val = r2_1.text_input("Tarifa", value=f_preview.tarifa or "")
+                    p_kwh = r2_2.number_input("🔴 Punta (kWh)", value=float(f_preview.consumo_punta.kwh), format="%.2f")
+                    p_prec = r2_3.number_input("Precio Punta (€/kWh)", value=float(f_preview.consumo_punta.precio_kwh), format="%.6f")
+                    p_eur = r2_4.number_input("Punta Base (€)", value=float(f_preview.consumo_punta.total_eur), format="%.2f")
 
-                    l_kwh = t2.number_input("Llano (kWh)", value=float(f_preview.consumo_llano.kwh), format="%.2f")
-                    l_eur = t2.number_input("Llano Base (€)", value=float(f_preview.consumo_llano.total_eur), format="%.2f")
-                    l_prec = t2.number_input("Precio Llano (€/kWh)", value=float(f_preview.consumo_llano.precio_kwh), format="%.6f")
+                    # Fila 3: Consumo Llano + Consumo Valle en una sola línea (6 columnas)
+                    r3_1, r3_2, r3_3, r3_4, r3_5, r3_6 = st.columns(6)
+                    l_kwh = r3_1.number_input("🟠 Llano (kWh)", value=float(f_preview.consumo_llano.kwh), format="%.2f")
+                    l_prec = r3_2.number_input("Precio Llano", value=float(f_preview.consumo_llano.precio_kwh), format="%.6f")
+                    l_eur = r3_3.number_input("Llano Base (€)", value=float(f_preview.consumo_llano.total_eur), format="%.2f")
+                    v_kwh = r3_4.number_input("🟢 Valle (kWh)", value=float(f_preview.consumo_valle.kwh), format="%.2f")
+                    v_prec = r3_5.number_input("Precio Valle", value=float(f_preview.consumo_valle.precio_kwh), format="%.6f")
+                    v_eur = r3_6.number_input("Valle Base (€)", value=float(f_preview.consumo_valle.total_eur), format="%.2f")
 
-                    v_kwh = t3.number_input("Valle (kWh)", value=float(f_preview.consumo_valle.kwh), format="%.2f")
-                    v_eur = t3.number_input("Valle Base (€)", value=float(f_preview.consumo_valle.total_eur), format="%.2f")
-                    v_prec = t3.number_input("Precio Valle (€/kWh)", value=float(f_preview.consumo_valle.precio_kwh), format="%.6f")
+                    # Fila 4: Potencias contratadas, precios potencia, total potencia y picos máximos (6 columnas)
+                    r4_1, r4_2, r4_3, r4_4, r4_5, r4_6 = st.columns(6)
+                    pot1_kw = r4_1.number_input("Pot. P1 (kW)", value=float(f_preview.potencia_p1.potencia_kw), format="%.3f")
+                    pot1_prec = r4_2.number_input("€/kW·día P1", value=float(f_preview.potencia_p1.precio_kw_dia), format="%.6f")
+                    pot2_kw = r4_3.number_input("Pot. P2 (kW)", value=float(f_preview.potencia_p2.potencia_kw), format="%.3f")
+                    pot2_prec = r4_4.number_input("€/kW·día P2", value=float(f_preview.potencia_p2.precio_kw_dia), format="%.6f")
+                    tot_pot_eur = r4_5.number_input("Total Pot. (€)", value=float(f_preview.total_potencia_eur), format="%.2f")
+                    pmax_p1_val = r4_6.number_input(
+                        "Pico P1 (kW)",
+                        value=float(f_preview.potencia_max_demandada_p1 or 0.0),
+                        format="%.3f",
+                    )
 
-                    st.markdown("**Potencia, Conceptos e Importes**")
-                    pot_c1, pot_c2, pot_c3 = st.columns(3)
-                    pot1_kw = pot_c1.number_input("Potencia P1 (kW)", value=float(f_preview.potencia_p1.potencia_kw), format="%.3f")
-                    pot2_kw = pot_c2.number_input("Potencia P2 (kW)", value=float(f_preview.potencia_p2.potencia_kw), format="%.3f")
-                    tot_pot_eur = pot_c3.number_input("Total Potencia (€)", value=float(f_preview.total_potencia_eur), format="%.2f")
-
-                    imp_c1, imp_c2, imp_c3 = st.columns(3)
-                    bono_val = imp_c1.number_input("Bono Social (€)", value=float(f_preview.bono_social_eur), format="%.2f")
-                    imp_el_val = imp_c2.number_input("Imp. Eléctrico (€)", value=float(f_preview.impuesto_electricidad_eur), format="%.2f")
-                    alq_val = imp_c3.number_input("Alquiler Contador (€)", value=float(f_preview.alquiler_contador_eur), format="%.2f")
-
-                    fin_c1, fin_c2, fin_c3 = st.columns(3)
-                    base_val = fin_c1.number_input("Base Imponible (€)", value=float(f_preview.base_imponible_eur), format="%.2f")
-                    iva_val = fin_c2.number_input("IVA (€)", value=float(f_preview.iva_eur), format="%.2f")
-                    tot_fac_val = fin_c3.number_input("TOTAL FACTURA (€)", value=float(f_preview.total_factura_eur), format="%.2f")
+                    # Fila 5: Otros conceptos e importes finales en una sola línea (6 columnas)
+                    r5_1, r5_2, r5_3, r5_4, r5_5, r5_6 = st.columns(6)
+                    bono_val = r5_1.number_input("Bono Social (€)", value=float(f_preview.bono_social_eur), format="%.2f")
+                    imp_el_val = r5_2.number_input("Imp. Elec. (€)", value=float(f_preview.impuesto_electricidad_eur), format="%.2f")
+                    alq_val = r5_3.number_input("Alquiler (€)", value=float(f_preview.alquiler_contador_eur), format="%.2f")
+                    base_val = r5_4.number_input("Base Imp. (€)", value=float(f_preview.base_imponible_eur), format="%.2f")
+                    iva_val = r5_5.number_input("IVA (€)", value=float(f_preview.iva_eur), format="%.2f")
+                    tot_fac_val = r5_6.number_input("TOTAL (€)", value=float(f_preview.total_factura_eur), format="%.2f")
 
                     guardar_btn = st.form_submit_button(
                         "✅ Confirmar y Guardar en Base de Datos",
@@ -338,6 +349,16 @@ if archivos_a_procesar:
                     if guardar_btn:
                         tot_kwh_calc = round(float(p_kwh) + float(l_kwh) + float(v_kwh), 2)
                         tot_ene_calc = round(float(p_eur) + float(l_eur) + float(v_eur), 2)
+                        pot1_tot_calc = (
+                            round(float(pot1_kw) * dias_val * float(pot1_prec), 2)
+                            if pot1_prec > 0
+                            else float(f_preview.potencia_p1.total_eur)
+                        )
+                        pot2_tot_calc = (
+                            round(float(pot2_kw) * dias_val * float(pot2_prec), 2)
+                            if pot2_prec > 0
+                            else float(f_preview.potencia_p2.total_eur)
+                        )
 
                         factura_final = f_preview.model_copy(
                             update={
@@ -368,16 +389,17 @@ if archivos_a_procesar:
                                 "potencia_p1": DetallePotencia(
                                     potencia_kw=float(pot1_kw),
                                     dias=dias_val,
-                                    precio_kw_dia=float(f_preview.potencia_p1.precio_kw_dia),
-                                    total_eur=float(f_preview.potencia_p1.total_eur),
+                                    precio_kw_dia=float(pot1_prec),
+                                    total_eur=pot1_tot_calc,
                                 ),
                                 "potencia_p2": DetallePotencia(
                                     potencia_kw=float(pot2_kw),
                                     dias=dias_val,
-                                    precio_kw_dia=float(f_preview.potencia_p2.precio_kw_dia),
-                                    total_eur=float(f_preview.potencia_p2.total_eur),
+                                    precio_kw_dia=float(pot2_prec),
+                                    total_eur=pot2_tot_calc,
                                 ),
                                 "total_potencia_eur": float(tot_pot_eur),
+                                "potencia_max_demandada_p1": float(pmax_p1_val) if pmax_p1_val > 0 else None,
                                 "bono_social_eur": float(bono_val),
                                 "impuesto_electricidad_eur": float(imp_el_val),
                                 "alquiler_contador_eur": float(alq_val),
